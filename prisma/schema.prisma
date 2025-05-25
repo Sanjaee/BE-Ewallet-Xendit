@@ -1,0 +1,64 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(uuid())
+  name          String
+  email         String        @unique
+  password      String
+  phoneNumber   String?
+  balance       Float         @default(0)
+  token         String        @unique
+  role          UserRole      @default(USER)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  transactions  Transaction[] @relation("UserTransactions")
+  received      Transaction[] @relation("RecipientTransactions")
+}
+
+model Transaction {
+  id                    String            @id @default(uuid())
+  userId                String
+  user                  User              @relation("UserTransactions", fields: [userId], references: [id])
+  recipientId           String?
+  recipient             User?             @relation("RecipientTransactions", fields: [recipientId], references: [id])
+  type                  TransactionType
+  amount                Float
+  status                TransactionStatus
+  referenceId           String?           @unique  // Made unique
+  xenditPaymentRequestId String?          // Field baru untuk Xendit Payment ID
+  adminWithdrawn        Boolean           @default(false)
+  description           String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TransactionType {
+  TOPUP
+  TRANSFER
+  WITHDRAW
+  FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}

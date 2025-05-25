@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Wallet Payment Simulation</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <style>
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center text-blue-600 mb-8">E-Wallet Payment Simulation</h1>
+        
+        <!-- Authentication Container -->
+        <div id="auth-container" class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex mb-4">
+                <button id="login-tab-btn" class="flex-1 py-2 px-4 text-center bg-blue-100 rounded-l-lg font-medium">Login</button>
+                <button id="register-tab-btn" class="flex-1 py-2 px-4 text-center bg-gray-100 rounded-r-lg font-medium">Register</button>
+            </div>
+            
+            <!-- Login Form -->
+            <div id="login-tab" class="tab-content active">
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="login-email">Email</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="login-email" type="email" placeholder="Email" required>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="login-password">Password</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="login-password" type="password" placeholder="Password" required>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                                type="submit">Sign In</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Register Form -->
+            <div id="register-tab" class="tab-content">
+                <form id="register-form">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="register-name">Full Name</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="register-name" type="text" placeholder="Full Name" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="register-email">Email</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="register-email" type="email" placeholder="Email" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="register-phone">Phone Number</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="register-phone" type="text" placeholder="Phone Number" required>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="register-password">Password</label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                               id="register-password" type="password" placeholder="Password" required>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                                type="submit">Register</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Main Application (Initially Hidden) -->
+        <div id="app-container" class="hidden">
+            <!-- User Info and Balance -->
+            <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-semibold" id="user-name">Welcome, User</h2>
+                        <p class="text-gray-600" id="user-email">user@example.com</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg mt-4 md:mt-0">
+                        <p class="text-sm text-blue-600">Your Balance</p>
+                        <p class="text-2xl font-bold text-blue-800" id="user-balance">Rp 0</p>
+                    </div>
+                </div>
+                <button id="logout-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded text-sm">
+                    Logout
+                </button>
+            </div>
+            
+            <!-- Actions Tabs -->
+            <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md mb-8">
+                <div class="flex overflow-x-auto">
+                    <button class="action-tab-btn flex-1 py-3 px-4 text-center font-medium" data-tab="topup-tab">Top Up</button>
+                    <button class="action-tab-btn flex-1 py-3 px-4 text-center font-medium" data-tab="transfer-tab">Transfer</button>
+                    <button class="action-tab-btn flex-1 py-3 px-4 text-center font-medium" data-tab="withdraw-tab">Withdraw</button>
+                    <button class="action-tab-btn flex-1 py-3 px-4 text-center font-medium" data-tab="history-tab">History</button>
+                </div>
+                
+                <!-- Top Up Tab -->
+                <div id="topup-tab" class="action-tab-content p-6 hidden">
+                    <h3 class="text-lg font-semibold mb-4">Top Up Your Wallet</h3>
+                    <form id="topup-form">
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="topup-amount">Amount (Rp)</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="topup-amount" type="number" min="10000" step="1000" placeholder="Minimum Rp 10,000" required>
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Payment Method</label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50">
+                                    <input type="radio" name="payment-method" value="ID_OVO" class="mr-2" required>
+                                    <span>OVO</span>
+                                </label>
+                                <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50">
+                                    <input type="radio" name="payment-method" value="ID_DANA" class="mr-2" required>
+                                    <span>DANA</span>
+                                </label>
+                                <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50">
+                                    <input type="radio" name="payment-method" value="ID_LINKAJA" class="mr-2" required>
+                                    <span>LinkAja</span>
+                                </label>
+                                <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50">
+                                    <input type="radio" name="payment-method" value="ID_SHOPEEPAY" class="mr-2" required>
+                                    <span>ShopeePay</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                                type="submit">Proceed to Payment</button>
+                    </form>
+                </div>
+                
+                <!-- Transfer Tab -->
+                <div id="transfer-tab" class="action-tab-content p-6 hidden">
+                    <h3 class="text-lg font-semibold mb-4">Transfer to Another User</h3>
+                    <form id="transfer-form">
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="transfer-recipient">Recipient ID</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="transfer-recipient" type="text" placeholder="Enter recipient's user ID" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="transfer-amount">Amount (Rp)</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="transfer-amount" type="number" min="1000" step="1000" placeholder="Minimum Rp 1,000" required>
+                            <p class="text-xs text-gray-500 mt-1">A 1% fee will be charged for all transfers</p>
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="transfer-description">Description (Optional)</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="transfer-description" type="text" placeholder="Payment for...">
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                            <div class="flex justify-between mb-2">
+                                <span>Transfer Amount:</span>
+                                <span id="transfer-summary-amount">Rp 0</span>
+                            </div>
+                            <div class="flex justify-between mb-2">
+                                <span>Fee (1%):</span>
+                                <span id="transfer-summary-fee">Rp 0</span>
+                            </div>
+                            <div class="flex justify-between font-bold">
+                                <span>Total:</span>
+                                <span id="transfer-summary-total">Rp 0</span>
+                            </div>
+                        </div>
+                        <button class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                                type="submit">Send Money</button>
+                    </form>
+                </div>
+                
+                <!-- Withdraw Tab -->
+                <div id="withdraw-tab" class="action-tab-content p-6 hidden">
+                    <h3 class="text-lg font-semibold mb-4">Withdraw to Bank Account</h3>
+                    <form id="withdraw-form">
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="withdraw-amount">Amount (Rp)</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="withdraw-amount" type="number" min="10000" step="1000" placeholder="Minimum Rp 10,000" required>
+                            <p class="text-xs text-gray-500 mt-1">A 1% fee will be charged for all withdrawals</p>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="withdraw-bank">Bank</label>
+                            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                    id="withdraw-bank" required>
+                                <option value="">Select Bank</option>
+                                <option value="BCA">BCA</option>
+                                <option value="BNI">BNI</option>
+                                <option value="BRI">BRI</option>
+                                <option value="MANDIRI">Mandiri</option>
+                                <option value="PERMATA">Permata</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="withdraw-account-number">Account Number</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="withdraw-account-number" type="text" placeholder="Enter account number" required>
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="withdraw-account-name">Account Holder Name</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight" 
+                                   id="withdraw-account-name" type="text" placeholder="Enter account holder name" required>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                            <div class="flex justify-between mb-2">
+                                <span>Withdrawal Amount:</span>
+                                <span id="withdraw-summary-amount">Rp 0</span>
+                            </div>
+                            <div class="flex justify-between mb-2">
+                                <span>Fee (1%):</span>
+                                <span id="withdraw-summary-fee">Rp 0</span>
+                            </div>
+                            <div class="flex justify-between font-bold">
+                                <span>Total Deduction:</span>
+                                <span id="withdraw-summary-total">Rp 0</span>
+                            </div>
+                            <div class="flex justify-between mt-2 text-green-600">
+                                <span>You will receive:</span>
+                                <span id="withdraw-summary-receive">Rp 0</span>
+                            </div>
+                        </div>
+                        <button class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                                type="submit">Withdraw Funds</button>
+                    </form>
+                </div>
+                
+                <!-- Transaction History Tab -->
+                <div id="history-tab" class="action-tab-content p-6 hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Transaction History</h3>
+                        <div>
+                            <select id="history-filter" class="border rounded py-1 px-2 text-sm">
+                                <option value="">All Transactions</option>
+                                <option value="TOPUP">Top Up</option>
+                                <option value="TRANSFER">Transfers</option>
+                                <option value="WITHDRAW">Withdrawals</option>
+                                <option value="FEE">Fees</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead>
+                                <tr>
+                                    <th class="py-2 px-4 border-b text-left">Date</th>
+                                    <th class="py-2 px-4 border-b text-left">Type</th>
+                                    <th class="py-2 px-4 border-b text-left">Amount</th>
+                                    <th class="py-2 px-4 border-b text-left">Status</th>
+                                    <th class="py-2 px-4 border-b text-left">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transaction-table-body">
+                                <!-- Transactions will be loaded here -->
+                                <tr>
+                                    <td colspan="5" class="py-4 text-center text-gray-500">No transactions found.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex justify-between items-center mt-4" id="pagination-controls">
+                        <button id="prev-page" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-3 rounded disabled:opacity-50">
+                            Previous
+                        </button>
+                        <span id="page-info">Page 1 of 1</span>
+                        <button id="next-page" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-3 rounded disabled:opacity-50">
+                            Next
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal for displaying messages -->
+        <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-lg font-bold" id="modal-title">Notice</h3>
+                    <button id="modal-close" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="modal-content" class="mb-4">
+                    <!-- Modal content goes here -->
+                </div>
+                <div class="flex justify-end">
+                    <button id="modal-action" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded mr-2">
+                        OK
+                    </button>
+                    <button id="modal-cancel" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-4 rounded hidden">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal for payment redirect simulation -->
+        <div id="payment-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-lg font-bold" id="payment-modal-title">Payment Gateway</h3>
+                    <button id="payment-modal-close" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="payment-modal-content" class="mb-4">
+                    <div class="text-center">
+                        <p>Payment Method: <span id="payment-method-display">-</span></p>
+                        <p class="text-2xl font-bold my-4">Amount: <span id="payment-amount-display">Rp 0</span></p>
+                        <div class="w-32 h-32 bg-gray-200 mx-auto flex items-center justify-center rounded-lg mb-4">
+                            <span class="text-gray-500">QR Code</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-6">Scan the QR code or click the button below to simulate payment</p>
+                    </div>
+                    <div class="flex justify-center mb-4">
+                        <button id="simulate-payment-success" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                            Simulate Successful Payment
+                        </button>
+                    </div>
+                    <div class="flex justify-center">
+                        <button id="simulate-payment-failure" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+                            Simulate Failed Payment
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulated API endpoint base
+        const API_BASE_URL = 'http://localhost:3000/api';
+        
+        // State management
+        const appState = {
+            isLoggedIn: false,
+            user: null,
+            token: null,
+            currentPage: 1,
+            transactionsPerPage: 10,
+            transactionType: '',
+            paymentDetails: null
+        };
+        
+        // DOM Elements
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const loginTabBtn = document.getElementById('login-tab-btn');
+        const registerTabBtn = document.getElementById('register-tab-btn');
+        const loginTab = document.getElementById('login-tab');
+        const registerTab = document.getElementById('register-tab');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const logoutBtn = document.getElementById('logout-btn');
+        const actionTabBtns = document.querySelectorAll('.action-tab-btn');
+        const actionTabContents = document.querySelectorAll('.action-tab-content');
+        const userName = document.getElementById('user-name');
+        const userEmail = document.getElementById('user-email');
+        const userBalance = document.getElementById('user-balance');
+        const topupForm = document.getElementById('topup-form');
+        const transferForm = document.getElementById('transfer-form');
+        const withdrawForm = document.getElementById('withdraw-form');
+        const transferAmountInput = document.getElementById('transfer-amount');
+        const transferSummaryAmount = document.getElementById('transfer-summary-amount');
+        const transferSummaryFee = document.getElementById('transfer-summary-fee');
+        const transferSummaryTotal = document.getElementById('transfer-summary-total');
+        const withdrawAmountInput = document.getElementById('withdraw-amount');
+        const withdrawSummaryAmount = document.getElementById('withdraw-summary-amount');
+        const withdrawSummaryFee = document.getElementById('withdraw-summary-fee');
+        const withdrawSummaryTotal = document.getElementById('withdraw-summary-total');
+        const withdrawSummaryReceive = document.getElementById('withdraw-summary-receive');
+        const historyFilter = document.getElementById('history-filter');
+        const transactionTableBody = document.getElementById('transaction-table-body');
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
+        const pageInfo = document.getElementById('page-info');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalAction = document.getElementById('modal-action');
+        const modalCancel = document.getElementById('modal-cancel');
+        const modalClose = document.getElementById('modal-close');
+        const paymentModal = document.getElementById('payment-modal');
+        const paymentModalClose = document.getElementById('payment-modal-close');
+        const paymentMethodDisplay = document.getElementById('payment-method-display');
+        const paymentAmountDisplay = document.getElementById('payment-amount-display');
+        const simulatePaymentSuccess = document.getElementById('simulate-payment-success');
+        const simulatePaymentFailure = document.getElementById('simulate-payment-failure');
+        
+        // Initialize app
+        function initApp() {
+            // Check for saved token in localStorage
+            const savedToken = localStorage.getItem('token');
+            const savedUser = localStorage.getItem('user');
+            
+            if (savedToken && savedUser) {
+                appState.token = savedToken;
+                appState.user = JSON.parse(savedUser);
+                appState.isLoggedIn = true;
+                showApp();
+                fetchBalance();
+                loadTransactions();
+            }
+            
+            // UI Event Listeners
+            loginTabBtn.addEventListener('click', () => {
+                loginTab.classList.add('active');
+                registerTab.classList.remove('active');
+                loginTabBtn.classList.add('bg-blue-100');
+                loginTabBtn.classList.remove('bg-gray-100');
+                registerTabBtn.classList.add('bg-gray-100');
+                registerTabBtn.classList.remove('bg-blue-100');
+            });
+            
+            registerTabBtn.addEventListener('click', () => {
+                registerTab.classList.add('active');
+                loginTab.classList.remove('active');
+                registerTabBtn.classList.add('bg-blue-100');
+                registerTabBtn.classList.remove('bg-gray-100');
+                loginTabBtn.classList.add('bg-gray-100');
+                loginTabBtn.classList.remove('bg-blue-100');
+            });
+            
+            // Auth form submissions
+            loginForm.addEventListener('submit', handleLogin);
+            registerForm.addEventListener('submit', handleRegister);
+            
+            // Main app events
+            logoutBtn.addEventListener('click', handleLogout);
+            actionTabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = btn.getAttribute('data-tab');
+                    
+                    // Change active tab button styling
+                    actionTabBtns.forEach(b => b.classList.remove('bg-blue-100'));
+                    btn.classList.add('bg-blue-100');
+                    
+                    // Show selected tab content
+                    actionTabContents.forEach(content => {
+                        content.classList.add('hidden');
+                    });
+                    document.getElementById(tabId).classList.remove('hidden');
+                    
+                    // If history tab is selected, refresh transactions
+                    if (tabId === 'history-tab') {
+                        loadTransactions();
+                    }
+                });
+            });
+            
+            // Form submissions
+            topupForm.addEventListener('submit', handleTopUp);
+            transferForm.addEventListener('submit', handleTransfer);
+            withdrawForm.addEventListener('submit', handleWithdraw);
+            
+            // Real-time calculation of fees
+            transferAmountInput.addEventListener('input', calculateTransferFees);
+            withdrawAmountInput.addEventListener('input', calculateWithdrawFees);
+            
+            // Transaction filter and pagination
+            historyFilter.addEventListener('change', () => {
+                appState.transactionType = historyFilter.value;
+                appState.currentPage = 1;
+                loadTransactions();
+            });
+            
+            prevPageBtn.addEventListener('click', () => {
+                if (appState.currentPage > 1) {
+                    appState.currentPage--;
+                    loadTransactions();
+                }
+            });
+            
+            nextPageBtn.addEventListener('click', () => {
+                appState.currentPage++;
+                loadTransactions();
+            });
+            
+            // Modal close events
+            modalClose.addEventListener('click', closeModal);
+            modalAction.addEventListener('click', closeModal);
+            paymentModalClose.addEventListener('click', closePaymentModal);
+            
+            // Payment simulation buttons
+            simulatePaymentSuccess.addEventListener('click', handlePaymentSuccess);
+            simulatePaymentFailure.addEventListener('click', handlePaymentFailure);
+        }
+        
+        // Auth functions
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            // Simulate API call
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/users/login`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                
+                // Simulating successful login
+                // const data = {
+                //     message: 'Login successful',
+                //     data: {
+                //         id: '123456',
+                //         name: 'Test User',
+                //         email: email,
+                //         token: 'sim_token_' + Date.now()
+                //     }
+                // };
+                
+                // Update app state
+                appState.user = data.data;
+                appState.token = data.data.token;
+                appState.isLoggedIn = true;
+                
+                // Save to localStorage
+                localStorage.setItem('token', appState.token);
+                localStorage.setItem('user', JSON.stringify(appState.user));
+                
+                // Show the main app
+                showApp();
+                
+                // Fetch user balance
+                fetchBalance();
+                
+                // Load transactions
+                loadTransactions();
+                
+            } catch (error) {
+                showModal('Error', 'Invalid email or password. Please try again.');
+            }
+        }
+        
+        async function handleRegister(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const phoneNumber = document.getElementById('register-phone').value;
+            const password = document.getElementById('register-password').value;
+            
+            // Simulate API call
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/users/register`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name, email, password, phoneNumber })
+                });
+                const data = await response.json();
+                
+                // Simulating successful registration
+                // const data = {
+                //     message: 'User registered successfully',
+                //     data: {
+                //         id: '123456',
+                //         name: name,
+                //         email: email,
+                //         token: 'sim_token_' + Date.now()
+                //     }
+                // };
+                
+                // Update app state
+                appState.user = data.data;
+                appState.token = data.data.token;
+                appState.isLoggedIn = true;
+                
+                // Save to localStorage
+                localStorage.setItem('token', appState.token);
+                localStorage.setItem('user', JSON.stringify(appState.user));
+                
+                // Show the main app
+                showApp();
+                
+                // Fetch user balance (will be 0 for new users)
+                fetchBalance();
+                
+            } catch (error) {
+                showModal('Error', 'Registration failed. Please try again.');
+            }
+        }
+        
+        function handleLogout() {
+            // Clear app state
+            appState.user = null;
+            appState.token = null;
+            appState.isLoggedIn = false;
+            
+            // Clear localStorage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            // Show auth container
+            authContainer.classList.remove('hidden');
+            appContainer.classList.add('hidden');
+            
+            // Reset forms
+            loginForm.reset();
+            registerForm.reset();
+        }
+        
+        // Wallet functions
+        async function fetchBalance() {
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/users/balance`, {
+                  headers: { 'Authorization': `Bearer ${appState.token}` }
+                });
+                const data = await response.json();
+                
+                // Simulating balance data
+                // const data = {
+                //     message: 'Balance fetched successfully',
+                //     data: {
+                //         balance: Math.floor(Math.random() * 1000000) // Random balance for simulation
+                //     }
+                // };
+                
+                // Update UI
+                userBalance.textContent = formatCurrency(data.data.balance);
+                userName.textContent = `Welcome, ${appState.user.name}`;
+                userEmail.textContent = appState.user.email;
+                
+            } catch (error) {
+                showModal('Error', 'Failed to fetch balance.');
+            }
+        }
+        
+        async function handleTopUp(e) {
+            e.preventDefault();
+            
+            const amount = document.getElementById('topup-amount').value;
+            const paymentMethod = document.querySelector('input[name="payment-method"]:checked')?.value;
+            
+            if (!paymentMethod) {
+                showModal('Error', 'Please select a payment method.');
+                return;
+            }
+            
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/wallet/topup`, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appState.token}`
+                  },
+                  body: JSON.stringify({ amount: Number(amount), paymentMethod })
+                });
+                const data = await response.json();
+                
+                // Simulating successful top-up initiation
+                // const data = {
+                //     message: 'Top up initiated successfully',
+                //     data: {
+                //         paymentId: 'sim_payment_' + Date.now(),
+                //         checkoutUrl: '#',
+                //     }
+                // };
+                
+                // Store payment details for simulation
+                appState.paymentDetails = {
+                    paymentId: data.data.paymentId,
+                    amount: Number(amount),
+                    paymentMethod: paymentMethod
+                };
+                
+                // Show payment simulation modal
+                showPaymentModal(paymentMethod, amount);
+                
+            } catch (error) {
+                showModal('Error', 'Failed to initiate top up.');
+            }
+        }
+        
+        async function handleTransfer(e) {
+            e.preventDefault();
+            
+            const recipientId = document.getElementById('transfer-recipient').value;
+            const amount = Number(document.getElementById('transfer-amount').value);
+            const description = document.getElementById('transfer-description').value;
+            
+            // Calculate fee
+            const fee = amount * 0.01;
+            const totalAmount = amount + fee;
+            
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/wallet/transfer`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appState.token}`
+                  },
+                  body: JSON.stringify({ recipientId, amount, description })
+                });
+                const data = await response.json();
+                
+                // Simulating successful transfer
+                // const data = {
+                //     message: 'Transfer completed successfully',
+                //     data: {
+                //         amount: amount,
+                //         fee: fee,
+                //         total: totalAmount,
+                //         recipientName: 'John Doe', // In real app, this would come from API
+                //         recipientEmail: 'johndoe@example.com'
+                //     }
+                // };
+                
+                // Show success message
+                showModal('Transfer Successful', `
+                    <p>You have successfully transferred ${formatCurrency(amount)} to ${data.data.recipientName}.</p>
+                    <p class="mt-2"><b>Fee:</b> ${formatCurrency(fee)}</p>
+                    <p><b>Total deducted:</b> ${formatCurrency(totalAmount)}</p>
+                `);
+                
+                // Update balance
+                fetchBalance();
+                
+                // Reset form
+                transferForm.reset();
+                transferSummaryAmount.textContent = 'Rp 0';
+                transferSummaryFee.textContent = 'Rp 0';
+                transferSummaryTotal.textContent = 'Rp 0';
+                
+                // Set first tab as active
+                actionTabBtns[0].click();
+                
+            } catch (error) {
+                showModal('Error', 'Transfer failed. Please try again.');
+            }
+        }
+        
+        async function handleWithdraw(e) {
+            e.preventDefault();
+            
+            const amount = Number(document.getElementById('withdraw-amount').value);
+            const bankCode = document.getElementById('withdraw-bank').value;
+            const accountNumber = document.getElementById('withdraw-account-number').value;
+            const accountHolderName = document.getElementById('withdraw-account-name').value;
+            
+            // Calculate fee
+            const fee = amount * 0.01;
+            const actualWithdrawalAmount = amount - fee;
+            
+            try {
+                // In a real app, this would be a fetch to your API
+                const response = await fetch(`${API_BASE_URL}/wallet/withdraw`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appState.token}`
+                  },
+                  body: JSON.stringify({ amount, bankCode, accountNumber, accountHolderName })
+                });
+                const data = await response.json();
+                
+                // Simulating successful withdrawal
+                // const data = {
+                //     message: 'Withdrawal initiated successfully',
+                //     data: {
+                //         withdrawalId: 'sim_withdraw_' + Date.now(),
+                //         amount: actualWithdrawalAmount,
+                //         fee: fee,
+                //         total: amount,
+                //         status: 'PENDING'
+                //     }
+                // };
+                
+                // Show success message
+                showModal('Withdrawal Initiated', `
+                    <p>Your withdrawal request has been submitted.</p>
+                    <p class="mt-2"><b>Amount:</b> ${formatCurrency(actualWithdrawalAmount)}</p>
+                    <p><b>Fee:</b> ${formatCurrency(fee)}</p>
+                    <p><b>Total deducted:</b> ${formatCurrency(amount)}</p>
+                    <p class="mt-2">Funds will be transferred to your bank account within 24 hours.</p>
+                `);
+                
+                // Update balance
+                fetchBalance();
+                
+                // Reset form
+                withdrawForm.reset();
+                withdrawSummaryAmount.textContent = 'Rp 0';
+                withdrawSummaryFee.textContent = 'Rp 0';
+                withdrawSummaryTotal.textContent = 'Rp 0';
+                withdrawSummaryReceive.textContent = 'Rp 0';
+                
+                // Set first tab as active
+                actionTabBtns[0].click();
+                
+            } catch (error) {
+                showModal('Error', 'Withdrawal failed. Please try again.');
+            }
+        }
+        
+        // Transaction history functions
+        async function loadTransactions() {
+            try {
+                // In a real app, this would be a fetch to your API
+                // const response = await fetch(
+                //   `${API_BASE_URL}/transactions?page=${appState.currentPage}&limit=${appState.transactionsPerPage}&type=${appState.transactionType}`,
+                //   {
+                //     headers: { 'Authorization': `Bearer ${appState.token}` }
+                //   }
+                // );
+                // const data = await response.json();
+                
+                // Simulating transaction data
+                const transactions = [];
+                const transactionTypes = ['TOPUP', 'TRANSFER', 'WITHDRAW', 'FEE'];
+                const statuses = ['COMPLETED', 'PENDING', 'FAILED'];
+                
+                // Generate random transactions for demonstration
+                for (let i = 0; i < 5; i++) {
+                    const type = appState.transactionType || transactionTypes[Math.floor(Math.random() * transactionTypes.length)];
+                    transactions.push({
+                        id: `tx_${Date.now()}_${i}`,
+                        type: type,
+                        amount: Math.floor(Math.random() * 500000) + 10000,
+                        status: statuses[Math.floor(Math.random() * statuses.length)],
+                        description: getDescriptionByType(type),
+                        createdAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString()
+                    });
+                }
+                
+                const data = {
+                    message: 'Transactions fetched successfully',
+                    data: {
+                        transactions: transactions,
+                        pagination: {
+                            total: 20, // Total transactions (simulated)
+                            page: appState.currentPage,
+                            limit: appState.transactionsPerPage,
+                            totalPages: 4 // Total pages (simulated)
+                        }
+                    }
+                };
+                
+                // Update UI with transactions
+                renderTransactions(data.data.transactions, data.data.pagination);
+                
+            } catch (error) {
+                transactionTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-4 text-center text-red-500">Failed to load transactions.</td>
+                    </tr>
+                `;
+            }
+        }
+        
+        function renderTransactions(transactions, pagination) {
+            if (transactions.length === 0) {
+                transactionTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-4 text-center text-gray-500">No transactions found.</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            let html = '';
+            transactions.forEach(tx => {
+                html += `
+                    <tr>
+                        <td class="py-2 px-4 border-b">${formatDate(tx.createdAt)}</td>
+                        <td class="py-2 px-4 border-b">${formatTransactionType(tx.type)}</td>
+                        <td class="py-2 px-4 border-b ${getAmountColorClass(tx.type)}">${formatCurrency(tx.amount)}</td>
+                        <td class="py-2 px-4 border-b">${formatStatus(tx.status)}</td>
+                        <td class="py-2 px-4 border-b">${tx.description}</td>
+                    </tr>
+                `;
+            });
+            
+            transactionTableBody.innerHTML = html;
+            
+            // Update pagination controls
+            pageInfo.textContent = `Page ${pagination.page} of ${pagination.totalPages}`;
+            prevPageBtn.disabled = pagination.page <= 1;
+            nextPageBtn.disabled = pagination.page >= pagination.totalPages;
+        }
+        
+        // Utility functions
+        function showApp() {
+            authContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            // Set first action tab as active by default
+            actionTabBtns[0].click();
+        }
+        
+        function calculateTransferFees() {
+            const amount = Number(transferAmountInput.value) || 0;
+            const fee = amount * 0.01;
+            const total = amount + fee;
+            
+            transferSummaryAmount.textContent = formatCurrency(amount);
+            transferSummaryFee.textContent = formatCurrency(fee);
+            transferSummaryTotal.textContent = formatCurrency(total);
+        }
+        
+        function calculateWithdrawFees() {
+            const amount = Number(withdrawAmountInput.value) || 0;
+            const fee = amount * 0.01;
+            const totalDeduction = amount;
+            const amountReceived = amount - fee;
+            
+            withdrawSummaryAmount.textContent = formatCurrency(amount);
+            withdrawSummaryFee.textContent = formatCurrency(fee);
+            withdrawSummaryTotal.textContent = formatCurrency(totalDeduction);
+            withdrawSummaryReceive.textContent = formatCurrency(amountReceived);
+        }
+        
+        function formatCurrency(amount) {
+            return `Rp ${amount.toLocaleString('id-ID')}`;
+        }
+        
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('id-ID', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function formatTransactionType(type) {
+            const types = {
+                'TOPUP': 'Top Up',
+                'TRANSFER': 'Transfer',
+                'WITHDRAW': 'Withdrawal',
+                'FEE': 'Fee'
+            };
+            return types[type] || type;
+        }
+        
+        function formatStatus(status) {
+            const statuses = {
+                'COMPLETED': '<span class="text-green-600 font-medium">Completed</span>',
+                'PENDING': '<span class="text-yellow-600 font-medium">Pending</span>',
+                'FAILED': '<span class="text-red-600 font-medium">Failed</span>'
+            };
+            return statuses[status] || status;
+        }
+        
+        function getAmountColorClass(type) {
+            if (type === 'TOPUP') return 'text-green-600';
+            if (type === 'TRANSFER' || type === 'WITHDRAW' || type === 'FEE') return 'text-red-600';
+            return '';
+        }
+        
+        function getDescriptionByType(type) {
+            switch (type) {
+                case 'TOPUP':
+                    const methods = ['OVO', 'DANA', 'LinkAja', 'ShopeePay'];
+                    return `Top up via ${methods[Math.floor(Math.random() * methods.length)]}`;
+                case 'TRANSFER':
+                    return `Transfer to user123@example.com`;
+                case 'WITHDRAW':
+                    const banks = ['BCA', 'BNI', 'BRI', 'Mandiri', 'Permata'];
+                    return `Withdrawal to ${banks[Math.floor(Math.random() * banks.length)]} - ****${Math.floor(Math.random() * 10000)}`;
+                case 'FEE':
+                    const feeTypes = ['transfer', 'withdrawal'];
+                    return `Fee for ${feeTypes[Math.floor(Math.random() * feeTypes.length)]}`;
+                default:
+                    return '';
+            }
+        }
+        
+        // Modal functions
+        function showModal(title, content, hasCancel = false) {
+            modalTitle.textContent = title;
+            modalContent.innerHTML = content;
+            
+            if (hasCancel) {
+                modalCancel.classList.remove('hidden');
+            } else {
+                modalCancel.classList.add('hidden');
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+        
+        function showPaymentModal(paymentMethod, amount) {
+            // Format payment method display name
+            let methodDisplay = paymentMethod;
+            if (paymentMethod === 'ID_OVO') methodDisplay = 'OVO';
+            if (paymentMethod === 'ID_DANA') methodDisplay = 'DANA';
+            if (paymentMethod === 'ID_LINKAJA') methodDisplay = 'LinkAja';
+            if (paymentMethod === 'ID_SHOPEEPAY') methodDisplay = 'ShopeePay';
+            
+            paymentMethodDisplay.textContent = methodDisplay;
+            paymentAmountDisplay.textContent = formatCurrency(Number(amount));
+            paymentModal.classList.remove('hidden');
+        }
+        
+        function closePaymentModal() {
+            paymentModal.classList.add('hidden');
+        }
+        
+        async function handlePaymentSuccess() {
+            // Close payment modal
+            closePaymentModal();
+            
+            // Simulate callback from payment provider
+            try {
+                // In a real app, you'd receive a webhook/callback to your API endpoint
+                
+                // Simulate successful payment processing
+                showModal('Payment Successful', `
+                    <p>Your payment of ${formatCurrency(appState.paymentDetails.amount)} has been processed successfully.</p>
+                    <p class="mt-2">Your wallet balance has been updated.</p>
+                `);
+                
+                // Update balance
+                fetchBalance();
+                
+                // Reset top-up form
+                topupForm.reset();
+                
+            } catch (error) {
+                showModal('Error', 'Failed to process payment confirmation.');
+            }
+        }
+        
+        function handlePaymentFailure() {
+            // Close payment modal
+            closePaymentModal();
+            
+            // Show failure message
+            showModal('Payment Failed', `
+                <p>Your payment could not be processed.</p>
+                <p class="mt-2">Please try again or use a different payment method.</p>
+            `);
+        }
+        
+        // Initialize the app when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
