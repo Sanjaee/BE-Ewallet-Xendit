@@ -3,7 +3,6 @@ const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const Xendit = require("xendit-node");
 const cors = require("cors");
-const config = require("./config"); // Asumsi file config ini ada
 
 const axios = require("axios");
 require("dotenv").config();
@@ -112,12 +111,46 @@ app.post("/api/users/login", async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         token: user.token,
       },
     });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Server error during login" });
+  }
+});
+
+app.post("/api/users/change-password", authenticateUser, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: "Both old and new passwords are required" });
+    }
+
+    // Ambil user dari req.user (dari token)
+    const user = req.user;
+
+    // Cek apakah password lama cocok
+    const hashedOld = hashPassword(oldPassword);
+    if (user.password !== hashedOld) {
+      return res.status(401).json({ error: "Old password is incorrect" });
+    }
+
+    // Update password dengan yang baru
+    const hashedNew = hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedNew },
+    });
+
+    res.status(200).json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Password update error:", err);
+    res.status(500).json({ error: "Server error during password update" });
   }
 });
 
@@ -140,9 +173,8 @@ app.get("/api/users/balance", authenticateUser, async (req, res) => {
     res.status(500).json({ error: "Server error while fetching balance" });
   }
 });
-// Fix untuk callback URL dan webhook handling
 
-const NGROK_URL = "https://304e-180-242-131-53.ngrok-free.app"; // GANTI dengan URL ngrok Anda
+// Fix untuk callback URL dan webhook handling
 const IS_DEVELOPMENT = process.env.NODE_ENV !== "production";
 
 // Update endpoint topup dengan callback URL yang benar
@@ -165,7 +197,7 @@ app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
 
     // PERBAIKAN: Pastikan callback URL lengkap dan konsisten
     const callbackUrl = IS_DEVELOPMENT
-      ? `${NGROK_URL}/api/xendit/callback` // Full path untuk webhook
+      ? `${process.env.NGROK_URL}/api/xendit/callback` // Full path untuk webhook
       : `${process.env.PRODUCTION_URL}/api/xendit/callback`;
 
     console.log("Using callback URL:", callbackUrl);
@@ -178,8 +210,8 @@ app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
       checkout_method: "ONE_TIME_PAYMENT",
       channel_code: paymentMethod,
       channel_properties: {
-        success_redirect_url: "http://localhost:3001",
-        failure_redirect_url: "http://localhost:3001",
+        success_redirect_url: process.env.SUCCESS_REDIRECT_URL || "http://localhost:3001",
+        failure_redirect_url: process.env.FAILURE_REDIRECT_URL || "http://localhost:3001/failure",
       },
       // PENTING: Pastikan callback URL lengkap
       callback_url: callbackUrl,
@@ -270,10 +302,16 @@ app.post("/api/xendit/callback", async (req, res) => {
     const { event, data, id, status, reference_id, metadata } = req.body;
 
     // Handle multiple callback formats
-    const transactionReferenceId = reference_id || data?.reference_id || data?.id;
-    const transactionStatus = status || data?.status || 
-      (event === "ewallet.payment.succeeded" ? "SUCCEEDED" : 
-       event === "ewallet.payment.failed" ? "FAILED" : "PENDING");
+    const transactionReferenceId =
+      reference_id || data?.reference_id || data?.id;
+    const transactionStatus =
+      status ||
+      data?.status ||
+      (event === "ewallet.payment.succeeded"
+        ? "SUCCEEDED"
+        : event === "ewallet.payment.failed"
+        ? "FAILED"
+        : "PENDING");
 
     console.log("Extracted reference_id:", transactionReferenceId);
     console.log("Extracted status:", transactionStatus);
@@ -294,7 +332,9 @@ app.post("/api/xendit/callback", async (req, res) => {
     });
 
     if (!transaction) {
-      console.log(`ERROR: Transaction not found for reference: ${transactionReferenceId}`);
+      console.log(
+        `ERROR: Transaction not found for reference: ${transactionReferenceId}`
+      );
       return res.status(404).json({ error: "Transaction not found" });
     }
 
@@ -308,9 +348,17 @@ app.post("/api/xendit/callback", async (req, res) => {
 
     // PERBAIKAN: Map status dengan lebih tepat
     let mappedStatus = "PENDING";
-    if (transactionStatus === "SUCCEEDED" || transactionStatus === "COMPLETED" || event === "ewallet.payment.succeeded") {
+    if (
+      transactionStatus === "SUCCEEDED" ||
+      transactionStatus === "COMPLETED" ||
+      event === "ewallet.payment.succeeded"
+    ) {
       mappedStatus = "COMPLETED";
-    } else if (transactionStatus === "FAILED" || transactionStatus === "CANCELLED" || event === "ewallet.payment.failed") {
+    } else if (
+      transactionStatus === "FAILED" ||
+      transactionStatus === "CANCELLED" ||
+      event === "ewallet.payment.failed"
+    ) {
       mappedStatus = "FAILED";
     }
 
@@ -327,7 +375,9 @@ app.post("/api/xendit/callback", async (req, res) => {
       },
     });
 
-    console.log(`Transaction ${transactionReferenceId} updated to status: ${mappedStatus}`);
+    console.log(
+      `Transaction ${transactionReferenceId} updated to status: ${mappedStatus}`
+    );
 
     // PERBAIKAN: Update user balance jika pembayaran berhasil
     let updatedUser = null;
@@ -359,17 +409,18 @@ app.post("/api/xendit/callback", async (req, res) => {
       reference_id: transactionReferenceId,
       status: mappedStatus,
       transaction_id: transaction.id,
-      user_balance: updatedUser ? updatedUser.balance : transaction.user.balance,
+      user_balance: updatedUser
+        ? updatedUser.balance
+        : transaction.user.balance,
       processed_at: new Date().toISOString(),
     };
 
     console.log("Sending callback response:", response);
     res.status(200).json(response);
-    
   } catch (error) {
     console.error("WEBHOOK ERROR:", error);
     console.error("Error stack:", error.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Webhook processing failed",
       message: error.message,
       timestamp: new Date().toISOString(),
@@ -378,82 +429,93 @@ app.post("/api/xendit/callback", async (req, res) => {
 });
 
 // PERBAIKAN: Enhanced Status Check Endpoint
-app.get("/api/wallet/topup/status/:referenceId", authenticateUser, async (req, res) => {
-  try {
-    const { referenceId } = req.params;
-    console.log(`Checking status for reference: ${referenceId}`);
+app.get(
+  "/api/wallet/topup/status/:referenceId",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { referenceId } = req.params;
+      console.log(`Checking status for reference: ${referenceId}`);
 
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        referenceId: referenceId,
-      },
-      include: {
-        user: {
-          select: {
-            balance: true,
+      const transaction = await prisma.transaction.findFirst({
+        where: {
+          referenceId: referenceId,
+        },
+        include: {
+          user: {
+            select: {
+              balance: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!transaction) {
-      console.log(`Transaction not found: ${referenceId}`);
-      return res.status(404).json({ error: "Transaction not found" });
+      if (!transaction) {
+        console.log(`Transaction not found: ${referenceId}`);
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      // Check if transaction belongs to the authenticated user
+      if (transaction.userId !== req.user.id) {
+        console.log(
+          `Unauthorized access attempt for transaction: ${referenceId}`
+        );
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const response = {
+        status: transaction.status,
+        amount: transaction.amount,
+        referenceId: transaction.referenceId,
+        currentBalance: transaction.user.balance,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt,
+      };
+
+      console.log(`Status check response:`, response);
+      res.json(response);
+    } catch (error) {
+      console.error("Status check error:", error);
+      res.status(500).json({ error: "Failed to check payment status" });
     }
-
-    // Check if transaction belongs to the authenticated user
-    if (transaction.userId !== req.user.id) {
-      console.log(`Unauthorized access attempt for transaction: ${referenceId}`);
-      return res.status(403).json({ error: "Unauthorized" });
-    }
-
-    const response = {
-      status: transaction.status,
-      amount: transaction.amount,
-      referenceId: transaction.referenceId,
-      currentBalance: transaction.user.balance,
-      createdAt: transaction.createdAt,
-      updatedAt: transaction.updatedAt,
-    };
-
-    console.log(`Status check response:`, response);
-    res.json(response);
-    
-  } catch (error) {
-    console.error("Status check error:", error);
-    res.status(500).json({ error: "Failed to check payment status" });
   }
-});
+);
 
 // TAMBAHAN: Endpoint untuk debug webhook (opsional)
-app.get("/api/debug/transaction/:referenceId", authenticateUser, async (req, res) => {
-  try {
-    const { referenceId } = req.params;
-    
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        referenceId: referenceId,
-      },
-      include: {
-        user: true,
-      },
-    });
+app.get(
+  "/api/debug/transaction/:referenceId",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { referenceId } = req.params;
 
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
+      const transaction = await prisma.transaction.findFirst({
+        where: {
+          referenceId: referenceId,
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      res.json({
+        transaction,
+        debug_info: {
+          current_time: new Date().toISOString(),
+          callback_url_used: IS_DEVELOPMENT
+            ? `${NGROK_URL}/api/xendit/callback`
+            : `${process.env.PRODUCTION_URL}/api/xendit/callback`,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
-
-    res.json({
-      transaction,
-      debug_info: {
-        current_time: new Date().toISOString(),
-        callback_url_used: IS_DEVELOPMENT ? `${NGROK_URL}/api/xendit/callback` : `${process.env.PRODUCTION_URL}/api/xendit/callback`,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
 // Xendit debugging middleware
 const debugXendit = async (req, res, next) => {
@@ -513,81 +575,90 @@ testXenditConnection().then((success) => {
   }
 });
 
-// Transfer to another user with 1% fee
+// Transfer to another user with fixed fee structure (fee added to total)
 app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
   try {
-    const { recipientId, amount, description } = req.body;
+    const { recipientPhoneNumber, amount, description } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "Invalid amount" });
+    if (!recipientPhoneNumber || !amount || amount <= 0) {
+      return res.status(400).json({ error: "Invalid input" });
     }
 
+    // Temukan sender berdasarkan ID dari token (authenticateUser middleware)
     const sender = await prisma.user.findUnique({
       where: { id: req.user.id },
     });
 
-    const recipient = await prisma.user.findUnique({
-      where: { id: recipientId },
+    if (!sender) {
+      return res.status(404).json({ error: "Sender not found" });
+    }
+
+    // Temukan recipient berdasarkan phoneNumber (gunakan findFirst karena bukan unique)
+    const recipient = await prisma.user.findFirst({
+      where: { phoneNumber: recipientPhoneNumber },
     });
 
     if (!recipient) {
       return res.status(404).json({ error: "Recipient not found" });
     }
 
-    // Calculate fee (1%)
-    const fee = amount * 0.01;
+    // Cek apakah pengirim mencoba mentransfer ke dirinya sendiri
+    if (sender.id === recipient.id) {
+      return res.status(400).json({ error: "You cannot transfer to yourself" });
+    }
+
+    // Hitung fee
+    const fee = amount > 250000000 ? 10000 : 2500;
     const totalAmount = amount + fee;
 
+    // Cek saldo cukup
     if (sender.balance < totalAmount) {
       return res.status(400).json({ error: "Insufficient balance" });
     }
 
-    // Create transaction with fee
-    await prisma.$transaction(async (prismaClient) => {
-      // Deduct total amount from sender
-      await prismaClient.user.update({
+    // Eksekusi transaksi dalam satu prisma.$transaction agar atomic
+    await prisma.$transaction(async (prismaTx) => {
+      // Kurangi saldo sender
+      await prismaTx.user.update({
         where: { id: sender.id },
         data: {
-          balance: {
-            decrement: totalAmount,
-          },
+          balance: { decrement: totalAmount },
         },
       });
 
-      // Add amount to recipient
-      await prismaClient.user.update({
+      // Tambah saldo recipient (tanpa fee)
+      await prismaTx.user.update({
         where: { id: recipient.id },
         data: {
-          balance: {
-            increment: amount,
-          },
+          balance: { increment: amount },
         },
       });
 
-      // Record fee transaction (going to admin/system)
-      await prismaClient.transaction.create({
+      // Catat transaksi fee
+      await prismaTx.transaction.create({
         data: {
           userId: sender.id,
           type: "FEE",
           amount: fee,
           status: "COMPLETED",
-          description: `Fee for transfer to ${recipient.email}`,
+          description: `Fee for transfer to ${recipient.phoneNumber}`,
         },
       });
 
-      // Record transfer transaction
-      await prismaClient.transaction.create({
+      // Catat transaksi transfer
+      await prismaTx.transaction.create({
         data: {
           userId: sender.id,
-          recipientId,
+          recipientId: recipient.id,
           type: "TRANSFER",
           amount,
           status: "COMPLETED",
-          description: description || `Transfer to ${recipient.email}`,
+          description: description || `Transfer to ${recipient.phoneNumber}`,
         },
       });
     });
 
+    // Response berhasil
     res.status(200).json({
       message: "Transfer completed successfully",
       data: {
@@ -595,7 +666,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
         fee,
         total: totalAmount,
         recipientName: recipient.name,
-        recipientEmail: recipient.email,
+        recipientPhoneNumber: recipient.phoneNumber,
       },
     });
   } catch (error) {
@@ -604,7 +675,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
   }
 });
 
-// Withdraw funds to bank account with automatic 1% fee to admin
+// Withdraw funds to bank account with fixed fee structure (fee added to total)
 app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
   try {
     const { amount, bankCode, accountNumber, accountHolderName } = req.body;
@@ -617,21 +688,28 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
       where: { id: req.user.id },
     });
 
-    // Calculate fee (1%)
-    const fee = amount * 0.01;
-    const actualWithdrawalAmount = amount - fee;
+    // Calculate fee based on amount
+    let fee;
+    if (amount > 250000000) {
+      // More than 250 million
+      fee = 10000;
+    } else {
+      fee = 2500;
+    }
 
-    if (user.balance < amount) {
+    const totalAmount = amount + fee;
+
+    if (user.balance < totalAmount) {
       return res.status(400).json({ error: "Insufficient balance" });
     }
 
     // Create a reference ID for this withdrawal
     const referenceId = `withdraw-${user.id}-${Date.now()}`;
 
-    // Send withdrawal to user's bank account via Xendit
+    // Send withdrawal to user's bank account via Xendit (full amount user requested)
     const disbursement = await disbursementService.create({
       externalID: referenceId,
-      amount: actualWithdrawalAmount,
+      amount: amount, // User gets full amount they requested
       bankCode,
       accountHolderName,
       accountNumber,
@@ -640,12 +718,12 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
 
     // Process in transaction
     await prisma.$transaction(async (prismaClient) => {
-      // Deduct amount from user balance
+      // Deduct total amount (amount + fee) from user balance
       await prismaClient.user.update({
         where: { id: user.id },
         data: {
           balance: {
-            decrement: amount,
+            decrement: totalAmount,
           },
         },
       });
@@ -655,7 +733,7 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
         data: {
           userId: user.id,
           type: "WITHDRAW",
-          amount: actualWithdrawalAmount,
+          amount: amount,
           status: "PENDING",
           referenceId: disbursement.id,
           description: `Withdrawal to ${bankCode} - ${accountNumber}`,
@@ -678,9 +756,9 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
       message: "Withdrawal initiated successfully",
       data: {
         withdrawalId: disbursement.id,
-        amount: actualWithdrawalAmount,
+        amount: amount, // Amount user will receive
         fee,
-        total: amount,
+        total: totalAmount, // Total deducted from balance
         status: "PENDING",
       },
     });
