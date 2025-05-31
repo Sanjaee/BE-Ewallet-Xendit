@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "User" (
-    "id" SERIAL NOT NULL,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
@@ -17,9 +17,9 @@ CREATE TABLE "User" (
 
 -- CreateTable
 CREATE TABLE "Transaction" (
-    "id" SERIAL NOT NULL,
-    "userId" INTEGER NOT NULL,
-    "recipientId" INTEGER,
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "recipientId" TEXT,
     "type" TEXT NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
     "status" TEXT NOT NULL,
