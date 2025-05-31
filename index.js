@@ -1,4 +1,4 @@
-// File: server.js (COMPLETE & FIXED)
+// File: server.js (OPTIMIZED - NO CACHE FOR TOPUP/BALANCE)
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
@@ -17,23 +17,20 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// Cache configuration
+// Cache configuration (reduced TTL for remaining cached items)
 const CACHE_TTL = {
-  BALANCE: 30,
-  TRANSACTIONS: 60,
-  USER_DATA: 300,
-  PAYMENT_STATUS: 15,
+  TRANSACTIONS: 30, // Reduced from 60
+  USER_DATA: 180, // Reduced from 300
   OTP: 300,
 };
 
-// FIXED: Cache helper functions with proper JSON handling
+// Cache helper functions (kept for non-critical operations)
 const getCacheKey = (type, userId, extra = "") => {
   return `ewallet:${type}:${userId}${extra ? `:${extra}` : ""}`;
 };
 
 const setCache = async (key, data, ttl = 60) => {
   try {
-    // Ensure data is properly serialized
     let serializedData;
     if (typeof data === "string") {
       serializedData = data;
@@ -63,7 +60,6 @@ const getCache = async (key) => {
 
     console.log(`✅ Cache hit: ${key}`);
 
-    // Try to parse as JSON, if it fails return as string
     try {
       return JSON.parse(cached);
     } catch (parseError) {
@@ -109,11 +105,10 @@ const deleteCachePattern = async (pattern) => {
   }
 };
 
-// Invalidate user-related cache
+// Simplified cache invalidation (only for transactions now)
 const invalidateUserCache = async (userId) => {
   try {
     const results = await Promise.allSettled([
-      deleteCachePattern(`ewallet:balance:${userId}*`),
       deleteCachePattern(`ewallet:transactions:${userId}*`),
       deleteCachePattern(`ewallet:user:${userId}*`),
       deleteCachePattern(`ewallet:auth:*${userId}*`),
@@ -135,7 +130,7 @@ function generateToken() {
   return require("crypto").randomBytes(32).toString("hex");
 }
 
-// FIXED: OTP helper functions with better error handling
+// OTP helper functions (keeping cache for OTP as it's security-related)
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -144,7 +139,7 @@ const storeOTP = async (email, otp, type = "VERIFICATION") => {
   try {
     const otpKey = getCacheKey("otp", email, type);
     const otpData = {
-      otp: otp.toString(), // Ensure OTP is string
+      otp: otp.toString(),
       type,
       createdAt: new Date().toISOString(),
       attempts: 0,
@@ -175,7 +170,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       return { success: false, error: "OTP expired or not found" };
     }
 
-    // Handle case where otpData might be a string
     let parsedOTPData;
     if (typeof otpData === "string") {
       try {
@@ -189,7 +183,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       parsedOTPData = otpData;
     }
 
-    // Validate OTP data structure
     if (!parsedOTPData || typeof parsedOTPData !== "object") {
       console.error(`❌ Invalid OTP data structure for ${email}`);
       await deleteCache(otpKey);
@@ -207,7 +200,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       };
     }
 
-    // Convert both OTPs to strings for comparison
     const inputOTPStr = inputOTP.toString().trim();
     const storedOTPStr = storedOTP.toString().trim();
 
@@ -216,7 +208,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
         `❌ Invalid OTP for ${email}. Expected: ${storedOTPStr}, Got: ${inputOTPStr}`
       );
 
-      // Increment attempts
       const updatedOTPData = {
         ...parsedOTPData,
         attempts: attempts + 1,
@@ -230,7 +221,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       };
     }
 
-    // OTP is valid, delete it
     console.log(`✅ OTP verified successfully for ${email}`);
     await deleteCache(otpKey);
     return { success: true };
@@ -243,7 +233,7 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
 app.use(cors());
 app.use(express.json());
 
-// Initialize Xendit (FIXED)
+// Initialize Xendit
 let xendit, disbursementService, eWalletService;
 
 try {
@@ -265,7 +255,7 @@ try {
   console.error("❌ Failed to initialize Xendit:", error.message);
 }
 
-// Middleware for authentication with caching
+// Simplified authentication middleware (with minimal caching)
 const authenticateUser = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -273,25 +263,19 @@ const authenticateUser = async (req, res, next) => {
       return res.status(401).json({ error: "Unauthorized: Token required" });
     }
 
-    const cacheKey = getCacheKey("auth", token);
-    let user = await getCache(cacheKey);
+    // Direct database query - no caching for auth
+    const user = await prisma.user.findUnique({
+      where: { token },
+    });
 
     if (!user) {
-      user = await prisma.user.findUnique({
-        where: { token },
+      return res.status(401).json({ error: "Unauthorized: Invalid token" });
+    }
+
+    if (!user.isVerified) {
+      return res.status(401).json({
+        error: "Account not verified. Please verify your email first.",
       });
-
-      if (!user) {
-        return res.status(401).json({ error: "Unauthorized: Invalid token" });
-      }
-
-      if (!user.isVerified) {
-        return res.status(401).json({
-          error: "Account not verified. Please verify your email first.",
-        });
-      }
-
-      await setCache(cacheKey, user, CACHE_TTL.USER_DATA);
     }
 
     req.user = user;
@@ -385,8 +369,6 @@ app.post("/api/users/verify-otp", async (req, res) => {
       data: { isVerified: true },
     });
 
-    await setCache(getCacheKey("auth", updatedUser.token), updatedUser);
-
     res.json({
       message: "Account verified successfully",
       data: {
@@ -466,8 +448,6 @@ app.post("/api/users/login", async (req, res) => {
         email,
       });
     }
-
-    await setCache(getCacheKey("auth", user.token), user);
 
     res.json({
       message: "Login successful",
@@ -572,7 +552,6 @@ app.post("/api/users/change-password", authenticateUser, async (req, res) => {
       data: { password: hashedPassword },
     });
 
-    await deleteCache(getCacheKey("auth", req.user.token));
     res.json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Change password error:", error);
@@ -580,22 +559,28 @@ app.post("/api/users/change-password", authenticateUser, async (req, res) => {
   }
 });
 
-// Get Balance
+// Get Balance - NO CACHE (Direct database query for real-time balance)
 app.get("/api/users/balance", authenticateUser, async (req, res) => {
   try {
-    const cacheKey = getCacheKey("balance", req.user.id);
-    let balance = await getCache(cacheKey);
+    console.log(`📊 Fetching real-time balance for user ${req.user.id}`);
 
-    if (!balance) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { balance: true },
-      });
-      balance = { balance: user.balance, cached_at: new Date().toISOString() };
-      await setCache(cacheKey, balance, CACHE_TTL.BALANCE);
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { balance: true },
+    });
 
-    res.json({ message: "Balance fetched successfully", data: balance });
+    const balanceData = {
+      balance: user.balance,
+      fetched_at: new Date().toISOString(),
+      real_time: true,
+    };
+
+    console.log(`✅ Real-time balance fetched: ${user.balance}`);
+
+    res.json({
+      message: "Balance fetched successfully",
+      data: balanceData,
+    });
   } catch (error) {
     console.error("Get balance error:", error);
     res.status(500).json({ error: "Failed to fetch balance" });
@@ -604,11 +589,13 @@ app.get("/api/users/balance", authenticateUser, async (req, res) => {
 
 const IS_DEVELOPMENT = process.env.NODE_ENV !== "production";
 
-// Top up with cache invalidation
+// Top up - NO CACHE (Simplified for faster processing)
 app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
   try {
     const { amount, paymentMethod } = req.body;
     const userId = req.user.id;
+
+    console.log(`💰 Processing topup: ${amount} for user ${userId}`);
 
     if (!amount || !paymentMethod) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -669,6 +656,7 @@ app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
       throw new Error(xenditResult.message || "Xendit API error");
     }
 
+    // Create transaction record immediately
     const transaction = await prisma.transaction.create({
       data: {
         userId: userId,
@@ -681,17 +669,7 @@ app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
       },
     });
 
-    const statusCacheKey = getCacheKey("payment_status", userId, referenceId);
-    await setCache(
-      statusCacheKey,
-      {
-        status: "PENDING",
-        amount: amount,
-        referenceId: referenceId,
-        created_at: new Date().toISOString(),
-      },
-      CACHE_TTL.PAYMENT_STATUS
-    );
+    console.log(`✅ Transaction created: ${referenceId}`);
 
     let checkoutUrl = null;
     if (xenditResult.is_redirect_required && xenditResult.actions) {
@@ -723,10 +701,11 @@ app.post("/api/wallet/topup", authenticateUser, async (req, res) => {
   }
 });
 
-// Enhanced Webhook Callback with cache invalidation
+// OPTIMIZED Webhook Callback - NO CACHE (Direct database operations for speed)
 app.post("/api/xendit/callback", async (req, res) => {
   try {
     console.log("=== XENDIT CALLBACK RECEIVED ===");
+    console.log("Timestamp:", new Date().toISOString());
     console.log("Body:", JSON.stringify(req.body, null, 2));
 
     const { event, data, id, status, reference_id, metadata } = req.body;
@@ -743,15 +722,20 @@ app.post("/api/xendit/callback", async (req, res) => {
         : "PENDING");
 
     if (!transactionReferenceId) {
+      console.error("❌ Missing reference_id in callback");
       return res.status(400).json({ error: "Missing reference_id" });
     }
 
+    console.log(`🔍 Processing callback for: ${transactionReferenceId}`);
+
+    // Direct database query - no cache
     const transaction = await prisma.transaction.findFirst({
       where: { referenceId: transactionReferenceId },
       include: { user: true },
     });
 
     if (!transaction) {
+      console.error(`❌ Transaction not found: ${transactionReferenceId}`);
       return res.status(404).json({ error: "Transaction not found" });
     }
 
@@ -770,6 +754,9 @@ app.post("/api/xendit/callback", async (req, res) => {
       mappedStatus = "FAILED";
     }
 
+    console.log(`📊 Status mapping: ${transactionStatus} -> ${mappedStatus}`);
+
+    // Direct database update - no cache
     const updatedTransaction = await prisma.transaction.update({
       where: { id: transaction.id },
       data: { status: mappedStatus, updatedAt: new Date() },
@@ -777,32 +764,18 @@ app.post("/api/xendit/callback", async (req, res) => {
 
     let updatedUser = null;
     if (mappedStatus === "COMPLETED") {
+      console.log(`💰 Updating balance for user ${transaction.userId}`);
+
+      // Direct balance update - no cache
       updatedUser = await prisma.user.update({
         where: { id: transaction.userId },
         data: { balance: { increment: transaction.amount } },
       });
 
-      await invalidateUserCache(transaction.userId);
-
-      console.log(`SUCCESS: User ${transaction.userId} balance updated!`);
-      console.log(`New balance: ${updatedUser.balance}`);
+      console.log(`✅ SUCCESS: User ${transaction.userId} balance updated!`);
+      console.log(`💵 New balance: ${updatedUser.balance}`);
+      console.log(`📈 Amount added: ${transaction.amount}`);
     }
-
-    const statusCacheKey = getCacheKey(
-      "payment_status",
-      transaction.userId,
-      transactionReferenceId
-    );
-    await setCache(
-      statusCacheKey,
-      {
-        status: mappedStatus,
-        amount: transaction.amount,
-        referenceId: transactionReferenceId,
-        updated_at: new Date().toISOString(),
-      },
-      CACHE_TTL.PAYMENT_STATUS
-    );
 
     const response = {
       received: true,
@@ -815,9 +788,10 @@ app.post("/api/xendit/callback", async (req, res) => {
       processed_at: new Date().toISOString(),
     };
 
+    console.log("=== CALLBACK PROCESSED SUCCESSFULLY ===");
     res.status(200).json(response);
   } catch (error) {
-    console.error("WEBHOOK ERROR:", error);
+    console.error("❌ WEBHOOK ERROR:", error);
     res.status(500).json({
       error: "Webhook processing failed",
       message: error.message,
@@ -826,7 +800,7 @@ app.post("/api/xendit/callback", async (req, res) => {
   }
 });
 
-// Payment status check with caching
+// Payment status check - NO CACHE (Real-time status)
 app.get(
   "/api/wallet/topup/status/:referenceId",
   authenticateUser,
@@ -834,38 +808,33 @@ app.get(
     try {
       const { referenceId } = req.params;
 
-      const statusCacheKey = getCacheKey(
-        "payment_status",
-        req.user.id,
-        referenceId
-      );
-      let statusData = await getCache(statusCacheKey);
+      console.log(`🔍 Checking real-time status for: ${referenceId}`);
 
-      if (!statusData) {
-        const transaction = await prisma.transaction.findFirst({
-          where: { referenceId: referenceId },
-          include: { user: { select: { balance: true } } },
-        });
+      // Direct database query - no cache
+      const transaction = await prisma.transaction.findFirst({
+        where: { referenceId: referenceId },
+        include: { user: { select: { balance: true } } },
+      });
 
-        if (!transaction) {
-          return res.status(404).json({ error: "Transaction not found" });
-        }
-
-        if (transaction.userId !== req.user.id) {
-          return res.status(403).json({ error: "Unauthorized" });
-        }
-
-        statusData = {
-          status: transaction.status,
-          amount: transaction.amount,
-          referenceId: transaction.referenceId,
-          currentBalance: transaction.user.balance,
-          createdAt: transaction.createdAt,
-          updatedAt: transaction.updatedAt,
-        };
-
-        await setCache(statusCacheKey, statusData, CACHE_TTL.PAYMENT_STATUS);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
       }
+
+      if (transaction.userId !== req.user.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const statusData = {
+        status: transaction.status,
+        amount: transaction.amount,
+        referenceId: transaction.referenceId,
+        currentBalance: transaction.user.balance,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt,
+        real_time: true,
+      };
+
+      console.log(`✅ Real-time status: ${transaction.status}`);
 
       res.json(statusData);
     } catch (error) {
@@ -875,7 +844,7 @@ app.get(
   }
 );
 
-// Transfer with cache invalidation
+// Transfer with minimal cache invalidation
 app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
   try {
     const { recipientPhoneNumber, amount, description } = req.body;
@@ -948,7 +917,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
       });
     });
 
-    // Invalidate cache for both sender and recipient
+    // Only invalidate transaction cache (not balance cache)
     await Promise.all([
       invalidateUserCache(sender.id),
       invalidateUserCache(recipient.id),
@@ -970,7 +939,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
   }
 });
 
-// Get transaction history with caching
+// Get transaction history with light caching
 app.get("/api/transactions", authenticateUser, async (req, res) => {
   try {
     const { page = 1, limit = 10, type } = req.query;
@@ -1028,7 +997,7 @@ app.get("/api/transactions", authenticateUser, async (req, res) => {
   }
 });
 
-// Withdraw with cache invalidation
+// Withdraw with minimal cache invalidation
 app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
   try {
     const { amount, bankCode, accountNumber, accountHolderName } = req.body;
@@ -1097,7 +1066,7 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
       });
     });
 
-    // Invalidate user cache after withdrawal
+    // Only invalidate transaction cache
     await invalidateUserCache(user.id);
 
     res.status(200).json({
@@ -1116,7 +1085,7 @@ app.post("/api/wallet/withdraw", authenticateUser, async (req, res) => {
   }
 });
 
-// Admin fee withdrawal with cache invalidation
+// Admin fee withdrawal
 app.post("/api/admin/withdraw-fees", authenticateUser, async (req, res) => {
   try {
     if (req.user.role !== "ADMIN") {
@@ -1203,6 +1172,7 @@ app.get(
           callback_url_used: IS_DEVELOPMENT
             ? `${process.env.NGROK_URL}/api/xendit/callback`
             : `${process.env.PRODUCTION_URL}/api/xendit/callback`,
+          cache_disabled: "Balance and topup cache disabled for speed",
         },
       });
     } catch (error) {
@@ -1212,15 +1182,11 @@ app.get(
   }
 );
 
-// Cache status endpoint for debugging
+// Simplified cache status endpoint
 app.get("/api/debug/cache-status", authenticateUser, async (req, res) => {
   try {
     const userId = req.user.id;
-    const cacheKeys = [
-      getCacheKey("balance", userId),
-      getCacheKey("transactions", userId, "1-10-all"),
-      getCacheKey("auth", req.user.token),
-    ];
+    const cacheKeys = [getCacheKey("transactions", userId, "1-10-all")];
 
     const cacheStatus = {};
     for (const key of cacheKeys) {
@@ -1231,6 +1197,8 @@ app.get("/api/debug/cache-status", authenticateUser, async (req, res) => {
     res.json({
       cache_status: cacheStatus,
       redis_connected: true,
+      optimization_note:
+        "Balance and topup operations now cache-free for speed",
     });
   } catch (error) {
     res.status(500).json({
@@ -1300,7 +1268,6 @@ const testEmailConnection = async () => {
   try {
     console.log("Testing email connection...");
     const { sendOTPEmail } = require("./src/utils/email_helper");
-    // Just test if the module loads without actually sending
     console.log("Email helper loaded successfully!");
     return true;
   } catch (error) {
@@ -1337,10 +1304,9 @@ Promise.all([
 
 app.listen(PORT, () => {
   console.log(`E-wallet service running on port http://localhost:${PORT}`);
-  console.log(
-    `Cache enabled: ${process.env.UPSTASH_REDIS_REST_URL ? "YES" : "NO"}`
-  );
-  console.log(`OTP authentication: ENABLED`);
+  console.log(`🚀 OPTIMIZED: Balance and topup operations are now cache-free`);
+  console.log(`📊 Real-time balance queries enabled`);
+  console.log(`⚡ Faster callback processing`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 });
 
