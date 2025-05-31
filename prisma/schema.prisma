@@ -14,51 +14,42 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(uuid())
+  id            Int      @id @default(autoincrement())
   name          String
-  email         String        @unique
+  email         String   @unique
   password      String
-  phoneNumber   String?
-  balance       Float         @default(0)
-  token         String        @unique
-  role          UserRole      @default(USER)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  transactions  Transaction[] @relation("UserTransactions")
-  received      Transaction[] @relation("RecipientTransactions")
+  phoneNumber   String   @unique
+  token         String   @unique
+  balance       Float    @default(0)
+  isVerified    Boolean  @default(false)
+  role          String   @default("USER")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  transactions        Transaction[] @relation("UserTransactions")
+  receivedTransactions Transaction[] @relation("RecipientTransactions")
+
+  @@map("User")
 }
 
 model Transaction {
-  id                    String            @id @default(uuid())
-  userId                String
-  user                  User              @relation("UserTransactions", fields: [userId], references: [id])
-  recipientId           String?
-  recipient             User?             @relation("RecipientTransactions", fields: [recipientId], references: [id])
-  type                  TransactionType
-  amount                Float
-  status                TransactionStatus
-  referenceId           String?           @unique  // Made unique
-  xenditPaymentRequestId String?          // Field baru untuk Xendit Payment ID
-  adminWithdrawn        Boolean           @default(false)
-  description           String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-}
+  id                       Int      @id @default(autoincrement())
+  userId                   Int
+  recipientId              Int?
+  type                     String   // TOPUP, TRANSFER, WITHDRAW, FEE
+  amount                   Float
+  status                   String   // PENDING, COMPLETED, FAILED
+  referenceId              String?  @unique
+  xenditPaymentRequestId   String?
+  description              String?
+  adminWithdrawn           Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
-enum UserRole {
-  USER
-  ADMIN
-}
+  // Relations
+  user      User  @relation("UserTransactions", fields: [userId], references: [id])
+  recipient User? @relation("RecipientTransactions", fields: [recipientId], references: [id])
 
-enum TransactionType {
-  TOPUP
-  TRANSFER
-  WITHDRAW
-  FEE
-}
-
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
+  @@map("Transaction")
 }

@@ -1,22 +1,14 @@
--- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('USER', 'ADMIN');
-
--- CreateEnum
-CREATE TYPE "TransactionType" AS ENUM ('TOPUP', 'TRANSFER', 'WITHDRAW', 'FEE');
-
--- CreateEnum
-CREATE TYPE "TransactionStatus" AS ENUM ('PENDING', 'COMPLETED', 'FAILED');
-
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
-    "phoneNumber" TEXT,
-    "balance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "phoneNumber" TEXT NOT NULL,
     "token" TEXT NOT NULL,
-    "role" "UserRole" NOT NULL DEFAULT 'USER',
+    "balance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "isVerified" BOOLEAN NOT NULL DEFAULT false,
+    "role" TEXT NOT NULL DEFAULT 'USER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -25,15 +17,16 @@ CREATE TABLE "User" (
 
 -- CreateTable
 CREATE TABLE "Transaction" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "recipientId" TEXT,
-    "type" "TransactionType" NOT NULL,
+    "id" SERIAL NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "recipientId" INTEGER,
+    "type" TEXT NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
-    "status" "TransactionStatus" NOT NULL,
+    "status" TEXT NOT NULL,
     "referenceId" TEXT,
-    "adminWithdrawn" BOOLEAN NOT NULL DEFAULT false,
+    "xenditPaymentRequestId" TEXT,
     "description" TEXT,
+    "adminWithdrawn" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -44,7 +37,13 @@ CREATE TABLE "Transaction" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_token_key" ON "User"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Transaction_referenceId_key" ON "Transaction"("referenceId");
 
 -- AddForeignKey
 ALTER TABLE "Transaction" ADD CONSTRAINT "Transaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
