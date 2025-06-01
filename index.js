@@ -183,6 +183,7 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       parsedOTPData = otpData;
     }
 
+    
     if (!parsedOTPData || typeof parsedOTPData !== "object") {
       console.error(`❌ Invalid OTP data structure for ${email}`);
       await deleteCache(otpKey);
