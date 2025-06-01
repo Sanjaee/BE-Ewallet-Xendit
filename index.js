@@ -5,11 +5,21 @@ const bcrypt = require("bcryptjs");
 const cors = require("cors");
 const { Redis } = require("@upstash/redis");
 const { sendOTPEmail } = require("./src/utils/email_helper");
+const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
+
+// Rate limiter configuration
+const otpLimiter = rateLimit({
+  windowMs: 2 * 60 * 60 * 1000, // 2 hours window
+  max: 3, // limit each IP to 5 requests per windowMs
+  message: { error: "Too many OTP requests, please try again after 2 hours" },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 
 // Initialize Upstash Redis
 const redis = new Redis({
@@ -21,7 +31,8 @@ const redis = new Redis({
 const CACHE_TTL = {
   TRANSACTIONS: 30, // Reduced from 60
   USER_DATA: 180, // Reduced from 300
-  OTP: 300,
+  OTP: 300, // 5 minutes for OTP validity
+  OTP_RATE_LIMIT: 7200, // 2 hours for rate limiting
 };
 
 // Cache helper functions (kept for non-critical operations)
@@ -138,6 +149,33 @@ const generateOTP = () => {
 const storeOTP = async (email, otp, type = "VERIFICATION") => {
   try {
     const otpKey = getCacheKey("otp", email, type);
+    const rateLimitKey = getCacheKey("otp_rate_limit", email, type);
+
+    // Check rate limit
+    const rateLimitData = await getCache(rateLimitKey);
+    let attempts = 0;
+    let lastReset = new Date().toISOString();
+
+    if (rateLimitData) {
+      attempts = rateLimitData.attempts || 0;
+      lastReset = rateLimitData.lastReset || lastReset;
+
+      // Check if we're within the 2-hour window
+      const lastResetDate = new Date(lastReset);
+      const now = new Date();
+      const hoursDiff = (now - lastResetDate) / (1000 * 60 * 60);
+
+      if (hoursDiff < 2) {
+        if (attempts >= 5) {
+          throw new Error("Rate limit exceeded. Please try again later.");
+        }
+      } else {
+        // Reset counter if 2 hours have passed
+        attempts = 0;
+        lastReset = now.toISOString();
+      }
+    }
+
     const otpData = {
       otp: otp.toString(),
       type,
@@ -145,13 +183,21 @@ const storeOTP = async (email, otp, type = "VERIFICATION") => {
       attempts: 0,
     };
 
+    // Store OTP
     const success = await setCache(otpKey, otpData, CACHE_TTL.OTP);
-    if (success) {
-      console.log(`🔐 OTP stored for ${email} (Type: ${type})`);
-      return otpKey;
-    } else {
+    if (!success) {
       throw new Error("Failed to store OTP in cache");
     }
+
+    // Update rate limit
+    const newRateLimitData = {
+      attempts: attempts + 1,
+      lastReset,
+    };
+    await setCache(rateLimitKey, newRateLimitData, CACHE_TTL.OTP_RATE_LIMIT);
+
+    console.log(`🔐 OTP stored for ${email} (Type: ${type})`);
+    return otpKey;
   } catch (error) {
     console.error(`❌ Failed to store OTP for ${email}:`, error.message);
     throw error;
@@ -183,7 +229,6 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
       parsedOTPData = otpData;
     }
 
-    
     if (!parsedOTPData || typeof parsedOTPData !== "object") {
       console.error(`❌ Invalid OTP data structure for ${email}`);
       await deleteCache(otpKey);
@@ -192,7 +237,7 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
 
     const { otp: storedOTP, attempts = 0 } = parsedOTPData;
 
-    if (attempts >= 3) {
+    if (attempts >= 5) {
       console.log(`❌ Too many attempts for ${email}`);
       await deleteCache(otpKey);
       return {
@@ -218,7 +263,7 @@ const verifyOTP = async (email, inputOTP, type = "VERIFICATION") => {
 
       return {
         success: false,
-        error: `Invalid OTP. ${3 - (attempts + 1)} attempts remaining.`,
+        error: `Invalid OTP. ${5 - (attempts + 1)} attempts remaining.`,
       };
     }
 
@@ -352,7 +397,7 @@ app.post("/api/users/register", async (req, res) => {
 });
 
 // Verify OTP
-app.post("/api/users/verify-otp", async (req, res) => {
+app.post("/api/users/verify-otp", otpLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body;
 
@@ -388,7 +433,7 @@ app.post("/api/users/verify-otp", async (req, res) => {
 });
 
 // Resend OTP
-app.post("/api/users/resend-otp", async (req, res) => {
+app.post("/api/users/resend-otp", otpLimiter, async (req, res) => {
   try {
     const { email, type = "VERIFICATION" } = req.body;
 
@@ -468,7 +513,7 @@ app.post("/api/users/login", async (req, res) => {
 });
 
 // Forgot Password
-app.post("/api/users/forgot-password", async (req, res) => {
+app.post("/api/users/forgot-password", otpLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -500,7 +545,7 @@ app.post("/api/users/forgot-password", async (req, res) => {
 });
 
 // Reset Password
-app.post("/api/users/reset-password", async (req, res) => {
+app.post("/api/users/reset-password", otpLimiter, async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
