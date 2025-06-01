@@ -881,6 +881,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
     }
 
     await prisma.$transaction(async (prismaTx) => {
+      // Update sender's balance
       await prismaTx.user.update({
         where: { id: sender.id },
         data: {
@@ -888,6 +889,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
         },
       });
 
+      // Update recipient's balance
       await prismaTx.user.update({
         where: { id: recipient.id },
         data: {
@@ -895,6 +897,7 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
         },
       });
 
+      // Create fee transaction for sender
       await prismaTx.transaction.create({
         data: {
           userId: sender.id,
@@ -905,19 +908,32 @@ app.post("/api/wallet/transfer", authenticateUser, async (req, res) => {
         },
       });
 
+      // Create transfer transaction for sender (OUTGOING)
       await prismaTx.transaction.create({
         data: {
           userId: sender.id,
           recipientId: recipient.id,
           type: "TRANSFER",
-          amount,
+          amount: -amount, // Negative amount for outgoing
           status: "COMPLETED",
           description: description || `Transfer to ${recipient.phoneNumber}`,
         },
       });
+
+      // Create transfer transaction for recipient (INCOMING)
+      await prismaTx.transaction.create({
+        data: {
+          userId: recipient.id,
+          recipientId: sender.id, // Using recipientId to store sender's ID
+          type: "TRANSFER",
+          amount: amount, // Positive amount for incoming
+          status: "COMPLETED",
+          description: `Transfer from ${sender.phoneNumber}`,
+        },
+      });
     });
 
-    // Only invalidate transaction cache (not balance cache)
+    // Only invalidate transaction cache
     await Promise.all([
       invalidateUserCache(sender.id),
       invalidateUserCache(recipient.id),
