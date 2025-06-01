@@ -3,18 +3,11 @@ const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
 dotenv.config();
 
-const {
-  EMAIL_SERVICE,
-  EMAIL_USER,
-  EMAIL_PASSWORD,
-  EMAIL_FROM,
-} = require("../config/env");
-
 const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
+  service: process.env.EMAIL_SERVICE,
   auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASSWORD,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
   },
 });
 
@@ -116,7 +109,7 @@ const sendOTPEmail = async (email, otp, type) => {
   `;
 
   await transporter.sendMail({
-    from: `"Zacode Support" <${EMAIL_FROM}>`,
+    from: `"Zacode Support" <${process.env.EMAIL_FROM}>`,
     to: email,
     subject,
     html: htmlContent,
